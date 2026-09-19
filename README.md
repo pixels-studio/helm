@@ -11,11 +11,12 @@ commands. Native builds require platform compiler tools (Xcode Command Line Tool
 
 ```sh
 npm ci
-npm run build
 npm start
 ```
 
-Development: `npm run dev`. Renderer changes hot reload; restart after main/preload edits.
+`npm start` builds the renderer, main process, and preload bundle before launching, so it
+also works from a clean checkout. Development: `npm run dev`. Renderer changes hot reload;
+restart after main/preload edits.
 `npm run rebuild` repairs node-pty after changing Electron versions.
 
 ## Use

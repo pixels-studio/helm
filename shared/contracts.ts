@@ -9,12 +9,37 @@ export const paneType = z.enum([
   'git',
   'browser',
 ]);
+export const conversationMessageSchema = z.object({
+  id: z.string(),
+  role: z.enum(['user', 'assistant']),
+  kind: z.enum(['text', 'thinking', 'tool', 'attachment', 'error']),
+  text: z.string(),
+  status: z.enum(['streaming', 'complete', 'failed']).default('complete'),
+});
+export const usageSchema = z.object({
+  inputTokens: z.number().int().nonnegative(),
+  cachedInputTokens: z.number().int().nonnegative(),
+  outputTokens: z.number().int().nonnegative(),
+  reasoningOutputTokens: z.number().int().nonnegative(),
+});
+export const attachmentSchema = z.object({
+  id,
+  name: z.string(),
+});
 export const paneSchema = z.object({
   id,
   sessionId: id,
   type: paneType,
   title: z.string(),
   path: z.string().optional(),
+  threadId: z.string().optional(),
+  messages: z.array(conversationMessageSchema).default([]),
+  usage: usageSchema.optional(),
+  model: z.string().default(''),
+  reasoningEffort: z
+    .enum(['minimal', 'low', 'medium', 'high', 'xhigh'])
+    .default('medium'),
+  archived: z.boolean().default(false),
 });
 export const sessionSchema = z.object({
   id,
@@ -46,6 +71,22 @@ export const stateSchema = z.object({
 export type Project = z.infer<typeof projectSchema>;
 export type Session = z.infer<typeof sessionSchema>;
 export type Pane = z.infer<typeof paneSchema>;
+export type ConversationMessage = z.infer<typeof conversationMessageSchema>;
+export type Usage = z.infer<typeof usageSchema>;
+export type Attachment = z.infer<typeof attachmentSchema>;
+export type AssistantEvent =
+  | {
+      paneId: string;
+      type: 'message';
+      message: ConversationMessage;
+    }
+  | { paneId: string; type: 'usage'; usage: Usage }
+  | {
+      paneId: string;
+      type: 'status';
+      status: 'running' | 'idle' | 'failed';
+      error?: string;
+    };
 export type State = z.infer<typeof stateSchema>;
 export type Change = { path: string; index: string; worktree: string };
 export type GitStatus = { isGit: boolean; branch: string; changes: Change[] };
@@ -74,6 +115,19 @@ export const requests = {
   'panes.add': z.tuple([id, z.enum(['claude', 'codex', 'terminal'])]),
   'panes.select': z.tuple([id]),
   'panes.remove': z.tuple([id]),
+  'panes.archive': z.tuple([id]),
+  'assistant.send': z.tuple([
+    z.object({
+      paneId: id,
+      text: z.string().trim().min(1).max(100000),
+      attachmentIds: z.array(id).max(8).default([]),
+      model: z.string().max(100),
+      reasoningEffort: z.enum(['minimal', 'low', 'medium', 'high', 'xhigh']),
+    }),
+  ]),
+  'assistant.pickAttachment': z.tuple([id]),
+  'assistant.cancel': z.tuple([id]),
+  'navigation.help': z.tuple([]),
   'terminal.create': z.tuple([
     z.object({
       sessionId: id,
@@ -126,7 +180,21 @@ export type API = {
     ): Promise<Pane>;
     select(id: string): Promise<void>;
     remove(id: string): Promise<void>;
+    archive(id: string): Promise<void>;
   };
+  assistant: {
+    send(input: {
+      paneId: string;
+      text: string;
+      attachmentIds: string[];
+      model: string;
+      reasoningEffort: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    }): Promise<void>;
+    pickAttachment(paneId: string): Promise<Attachment | null>;
+    cancel(paneId: string): Promise<void>;
+    onEvent(fn: (event: AssistantEvent) => void): () => void;
+  };
+  navigation: { help(): Promise<void> };
   terminal: {
     create(input: {
       sessionId: string;

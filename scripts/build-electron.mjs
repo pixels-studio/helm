@@ -5,7 +5,7 @@ await build({
   platform: 'node',
   format: 'cjs',
   outfile: 'dist/main/index.cjs',
-  external: ['electron', 'node-pty'],
+  external: ['electron', 'node-pty', '@openai/codex-sdk'],
   sourcemap: true,
 });
 await build({

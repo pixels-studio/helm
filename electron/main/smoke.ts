@@ -17,7 +17,7 @@ export async function smoke(
     assert.equal(backend.terminal.records.size, 4);
     assert.match(
       await win.webContents.executeJavaScript('document.body.innerText'),
-      /Implement Meeting Link/,
+      /Smoke repository/,
     );
     console.log(
       'HELM_RESTART_OK: project, session, worktree, pane layout restored; four fresh PTYs',
@@ -142,7 +142,7 @@ export async function smoke(
   await new Promise((r) => setTimeout(r, 1500));
   assert.match(
     await win.webContents.executeJavaScript('document.body.innerText'),
-    /Implement Meeting Link/,
+    /Smoke repository/,
   );
   await win.webContents.executeJavaScript(
     "[...document.querySelectorAll('.file-row')].find(e=>e.textContent.includes('hello.txt'))?.click()",

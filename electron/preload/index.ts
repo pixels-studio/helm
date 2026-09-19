@@ -4,7 +4,9 @@ const groups: Record<string, string[]> = {
   state: ['get'],
   projects: ['list', 'add', 'remove', 'select'],
   sessions: ['create', 'select', 'remove'],
-  panes: ['add', 'select', 'remove'],
+  panes: ['add', 'select', 'remove', 'archive'],
+  assistant: ['send', 'cancel', 'pickAttachment'],
+  navigation: ['help'],
   terminal: ['create', 'write', 'resize', 'kill', 'snapshot'],
   git: ['status', 'branches', 'diff'],
   filesystem: ['list', 'readFile', 'stat', 'watch', 'unwatch'],
@@ -26,6 +28,8 @@ function subscribe(channel: string, fn: (data: unknown) => void) {
 }
 api.terminal.onData = (fn: (data: unknown) => void) =>
   subscribe('terminal:data', fn);
+api.assistant.onEvent = (fn: (data: unknown) => void) =>
+  subscribe('assistant:event', fn);
 api.filesystem.onChange = (fn: (data: unknown) => void) =>
   subscribe('filesystem:change', fn);
 contextBridge.exposeInMainWorld('helm', api as unknown as API);

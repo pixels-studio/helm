@@ -1,5 +1,13 @@
-import { app, BrowserWindow, dialog, ipcMain, protocol, net } from 'electron';
-import { join, resolve, relative, isAbsolute } from 'node:path';
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  protocol,
+  net,
+  shell,
+} from 'electron';
+import { basename, join, resolve, relative, isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { homedir } from 'node:os';
 import { requests } from '../../shared/contracts';
@@ -81,9 +89,26 @@ app
         });
         return result.canceled ? undefined : result.filePaths[0];
       },
+      async () => {
+        const result = await dialog.showOpenDialog(win, {
+          properties: ['openFile'],
+          filters: [
+            {
+              name: 'Images',
+              extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'],
+            },
+          ],
+        });
+        if (result.canceled) return undefined;
+        return {
+          name: basename(result.filePaths[0]),
+          path: result.filePaths[0],
+        };
+      },
       (channel, data) => {
         if (win && !win.isDestroyed()) win.webContents.send(channel, data);
       },
+      () => shell.openExternal('https://artifacts.studio/helm'),
     );
     for (const [channel, schema] of Object.entries(requests))
       ipcMain.handle(channel, async (event, ...args) => {

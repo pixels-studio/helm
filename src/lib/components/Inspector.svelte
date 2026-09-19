@@ -1,7 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Session, GitStatus, Entry } from '$shared/contracts';
-  let { session }: { session: Session } = $props();
+  let {
+    session,
+    initialMode = 'diff',
+    embedded = false,
+  }: {
+    session: Session;
+    initialMode?: 'diff' | 'files';
+    embedded?: boolean;
+  } = $props();
   let mode = $state<'diff' | 'files'>('diff');
   let status = $state<GitStatus>({ isGit: false, branch: '', changes: [] });
   let entries = $state<Entry[]>([]);
@@ -44,6 +52,7 @@
     await refresh();
   }
   onMount(() => {
+    mode = initialMode;
     void refresh();
     void window.helm.filesystem
       .watch(session.id)
@@ -66,8 +75,8 @@
   });
 </script>
 
-<section class="inspector panel">
-  <header>
+<section class="inspector panel" class:embedded>
+  {#if !embedded}<header>
     <img src="/icons/diff.svg" alt="" /><button
       class="plain title"
       onclick={() => {
@@ -84,7 +93,7 @@
       aria-label="Refresh files and Git"
       onclick={refresh}>↻</button
     >
-  </header>
+  </header>{/if}
   <div class="inspection">
     {#if error}<p class="error">{error}</p>{/if}
     {#if mode === 'diff'}
@@ -152,6 +161,12 @@
     padding: 10px 16px;
     overflow: auto;
     flex: 1;
+  }
+  .embedded {
+    height: 100%;
+    min-width: 0;
+    border-radius: 0;
+    background: transparent;
   }
   .file-row {
     width: 100%;

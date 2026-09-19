@@ -5,17 +5,58 @@ import { Store } from './persistence';
 import { Worktrees } from './worktrees';
 import { Filesystem } from './filesystem';
 import { Terminals } from './terminal';
+import { Assistant } from './assistant';
 import * as git from './git';
 import type { API, Session } from '../../shared/contracts';
 export function services(
   root: string,
   choose: () => Promise<string | undefined>,
+  chooseAttachment: () => Promise<{ name: string; path: string } | undefined>,
   emit: (channel: string, data: unknown) => void,
+  openHelp: () => Promise<void>,
 ) {
   const store = new Store(root),
     worktrees = new Worktrees(root),
     fs = new Filesystem(),
-    terminal = new Terminals(store, (e) => emit('terminal:data', e));
+    terminal = new Terminals(store, (e) => emit('terminal:data', e)),
+    assistant = new Assistant(
+      store,
+      (e) => emit('assistant:event', e),
+      chooseAttachment,
+    );
+  const createPane = (sessionId: string) => ({
+    id: randomUUID(),
+    sessionId,
+    type: 'codex' as const,
+    title: 'New Conversation',
+    messages: [],
+    model: '',
+    reasoningEffort: 'medium' as const,
+    archived: false,
+  });
+  const ensureSession = async (projectId: string) => {
+    const existing = store.state.sessions
+      .filter((session) => session.projectId === projectId)
+      .sort((a, b) => b.lastOpenedAt - a.lastOpenedAt)[0];
+    if (existing) return existing;
+    const project = store.project(projectId);
+    const sessionId = randomUUID();
+    const pane = createPane(sessionId);
+    const session: Session = {
+      id: sessionId,
+      projectId,
+      title: 'Workspace',
+      worktreePath: project.path,
+      branch: (await git.status(project.path)).branch,
+      ownsWorktree: false,
+      createdAt: Date.now(),
+      lastOpenedAt: Date.now(),
+      layout: { paneIds: [pane.id], activePaneId: pane.id },
+    };
+    store.state.sessions.push(session);
+    store.state.panes.push(pane);
+    return session;
+  };
   const removeSession = async (id: string) => {
     const s = store.session(id);
     if (s.ownsWorktree) await worktrees.remove(s);
@@ -26,9 +67,10 @@ export function services(
     if (store.state.lastSessionId === id) delete store.state.lastSessionId;
     store.save();
   };
-  const api: Omit<API, 'terminal' | 'filesystem'> & {
+  const api: Omit<API, 'terminal' | 'filesystem' | 'assistant'> & {
     terminal: Omit<API['terminal'], 'onData'>;
     filesystem: Omit<API['filesystem'], 'onChange'>;
+    assistant: Omit<API['assistant'], 'onEvent'>;
   } = {
     state: { get: async () => store.state },
     projects: {
@@ -49,14 +91,17 @@ export function services(
           store.state.projects.push(p);
         }
         store.state.lastProjectId = p.id;
-        delete store.state.lastSessionId;
+        const session = await ensureSession(p.id);
+        store.state.lastSessionId = session.id;
         store.save();
         return p;
       },
       select: async (id) => {
         store.project(id).lastOpenedAt = Date.now();
         store.state.lastProjectId = id;
-        delete store.state.lastSessionId;
+        const session = await ensureSession(id);
+        session.lastOpenedAt = Date.now();
+        store.state.lastSessionId = session.id;
         store.save();
       },
       remove: async (id) => {
@@ -132,9 +177,13 @@ export function services(
               : type === 'claude'
                 ? 'Claude'
                 : 'Codex',
+          messages: [],
+          model: '',
+          reasoningEffort: 'medium' as const,
+          archived: false,
         };
         store.state.panes.push(p);
-        s.layout.paneIds.push(p.id);
+        s.layout.paneIds.unshift(p.id);
         s.layout.activePaneId = p.id;
         store.save();
         return p;
@@ -154,7 +203,18 @@ export function services(
           s.layout.activePaneId = s.layout.paneIds[0];
         store.save();
       },
+      archive: async (id) => {
+        const pane = store.pane(id);
+        pane.archived = true;
+        store.save();
+      },
     },
+    assistant: {
+      send: async (input) => assistant.send(input),
+      cancel: async (paneId) => assistant.cancel(paneId),
+      pickAttachment: async (paneId) => assistant.pickAttachment(paneId),
+    },
+    navigation: { help: openHelp },
     terminal: {
       create: async (i) => terminal.create(i),
       write: async (id, data) => terminal.write(id, data),
@@ -208,6 +268,7 @@ export function services(
     terminal,
     close: async () => {
       terminal.close();
+      assistant.close();
       await fs.close();
     },
   };
